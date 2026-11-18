@@ -55,9 +55,9 @@
     ];
 
     const proxies = [
-      url => 'https://' + 'api.allorigins.win/raw?url=' + encodeURIComponent(url),
-      url => 'https://' + 'corsproxy.io/?' + encodeURIComponent(url)
-    ];
+  url => 'https://codetabs.com' + encodeURIComponent(url)
+];
+
 
     async function baixarXML(feedUrl) {
       for (const montarProxy of proxies) {
