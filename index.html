@@ -1,7 +1,10 @@
+
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
 <style>
   body {
     margin: 0;
@@ -11,6 +14,11 @@
     font-family: "Segoe UI", Roboto, Arial, sans-serif;
     font-size: 12px;
   }
+
+  #feed-lancamentos {
+    text-align: center;
+  }
+
   .faixa-card {
     background: rgba(0, 0, 0, 0.75);
     border: 2px ridge #ccc;
@@ -18,6 +26,7 @@
     margin-bottom: 12px;
     text-align: center;
   }
+
   .faixa-card img {
     width: 100px;
     height: 100px;
@@ -25,117 +34,265 @@
     border: 2px double white;
     margin-bottom: 6px;
   }
+
   .faixa-titulo {
     font-size: 12px;
     font-weight: bold;
     color: #fff;
     margin: 4px 0;
-    word-wrap: break-word;
+    overflow-wrap: anywhere;
   }
+
   .faixa-autor {
     font-size: 11px;
     color: #00ffff;
     margin-bottom: 6px;
   }
-  /* Barra de rolagem fina combinando com o site */
-  * { scrollbar-width: thin; }
-  ::-webkit-scrollbar { width: 8px; }
+
+  .faixa-data {
+    font-size: 10px;
+    color: #aaa;
+    margin-bottom: 6px;
+  }
+
+  .status-feed {
+    color: #00ffff;
+    font-size: 10px;
+    margin-bottom: 10px;
+  }
+
+  * {
+    scrollbar-width: thin;
+  }
+
+  ::-webkit-scrollbar {
+    width: 8px;
+  }
 </style>
 </head>
+
 <body>
-  <div id="feed-lancamentos" style="text-align: center;">Carregando lançamentos...</div>
 
-  <script>
-    // Todos os 4 feeds oficiais do Maranguapeboyz
-    const feedsRSS = [
-      'https://feeds.soundcloud.com/users/soundcloud:users:317924305/sounds.rss',  // santacruz4life / igniskpt
-      'https://feeds.soundcloud.com/users/soundcloud:users:1353337512/sounds.rss', // marquinhos ak trovão
-      'https://feeds.soundcloud.com/users/soundcloud:users:851749639/sounds.rss',  // gvbthepluggg
-      'https://feeds.soundcloud.com/users/soundcloud:users:1694143418/sounds.rss'  // MARANGUAPEBOYZ*
-    ];
+<div id="feed-lancamentos">
+  Carregando lançamentos...
+</div>
 
-    const proxies = [
-  url => 'https://codetabs.com' + encodeURIComponent(url)
+<script>
+
+const feedsRSS = [
+  'https://feeds.soundcloud.com/users/soundcloud:users:317924305/sounds.rss',
+  'https://feeds.soundcloud.com/users/soundcloud:users:1353337512/sounds.rss',
+  'https://feeds.soundcloud.com/users/soundcloud:users:851749639/sounds.rss',
+  'https://feeds.soundcloud.com/users/soundcloud:users:1694143418/sounds.rss'
 ];
 
+// Proxy para permitir a leitura dos feeds RSS
+const proxies = [
+  url => 'https://api.allorigins.win/raw?url=' + encodeURIComponent(url),
+  url => 'https://corsproxy.io/?url=' + encodeURIComponent(url)
+];
 
-    async function baixarXML(feedUrl) {
-      for (const montarProxy of proxies) {
-        try {
-          const resposta = await fetch(montarProxy(feedUrl));
-          if (resposta.ok) {
-            const texto = await resposta.text();
-            if (texto.includes('<rss') && texto.includes('<item>')) {
-              return texto;
-            }
-          }
-        } catch (e) {}
+async function baixarXML(feedUrl) {
+
+  for (const montarProxy of proxies) {
+
+    try {
+
+      const resposta = await fetch(montarProxy(feedUrl));
+
+      if (!resposta.ok) continue;
+
+      const texto = await resposta.text();
+
+      if (texto.includes('<rss') && texto.includes('<item')) {
+        return texto;
       }
-      return null;
+
+    } catch (erro) {
+      console.warn('Falha ao acessar proxy:', erro);
     }
 
-    async function carregarLancamentos() {
-      const container = document.getElementById('feed-lancamentos');
-      let todasAsFaixas = [];
+  }
 
-      // Baixa os 4 feeds ao mesmo tempo para carregar mais rápido
-      const resultadosXML = await Promise.all(feedsRSS.map(url => baixarXML(url)));
+  return null;
+}
 
-      resultadosXML.forEach(xmlTexto => {
-        if (!xmlTexto) return;
+function textoSeguro(valor) {
+  return valor || '';
+}
 
-        const parser = new DOMParser();
-        const xml = parser.parseFromString(xmlTexto, 'text/xml');
-        const itens = xml.querySelectorAll('item');
+async function carregarLancamentos() {
 
-        // Pega apenas as 5 mais recentes de cada perfil para não pesar o navegador
-        Array.from(itens).slice(0, 5).forEach(item => {
-          const titulo = item.querySelector('title')?.textContent || 'Sem título';
-          const link = item.querySelector('link')?.textContent || '';
-          const pubDate = item.querySelector('pubDate')?.textContent || '';
+  const container = document.getElementById('feed-lancamentos');
 
-          const itunesAuthor = item.getElementsByTagName('itunes:author')[0];
-          const autor = itunesAuthor ? itunesAuthor.textContent : 'Maranguapeboyz';
+  container.innerHTML = '<p>Atualizando lançamentos...</p>';
 
-          const itunesImg = item.getElementsByTagName('itunes:image')[0];
-          // Troca o tamanho t3000x3000 por large para carregar as capas instantaneamente
-          let capa = itunesImg ? itunesImg.getAttribute('href') : '';
-          if (capa) {
-            capa = capa.replace('-t3000x3000.', '-large.');
-          }
+  let todasAsFaixas = [];
 
-          if (link) {
-            todasAsFaixas.push({ titulo, link, pubDate, autor, capa });
-          }
+  const resultadosXML = await Promise.all(
+    feedsRSS.map(url => baixarXML(url))
+  );
+
+  resultadosXML.forEach(xmlTexto => {
+
+    if (!xmlTexto) return;
+
+    const parser = new DOMParser();
+
+    const xml = parser.parseFromString(xmlTexto, 'text/xml');
+
+    if (xml.querySelector('parsererror')) return;
+
+    const itens = xml.querySelectorAll('item');
+
+    Array.from(itens).slice(0, 10).forEach(item => {
+
+      const titulo =
+        item.querySelector('title')?.textContent || 'Sem título';
+
+      const link =
+        item.querySelector('link')?.textContent?.trim() || '';
+
+      const pubDate =
+        item.querySelector('pubDate')?.textContent || '';
+
+      const autorTag = item.getElementsByTagName('itunes:author')[0];
+
+      const autor = autorTag
+        ? autorTag.textContent
+        : 'Maranguapeboyz';
+
+      const imagemTag = item.getElementsByTagName('itunes:image')[0];
+
+      let capa = imagemTag
+        ? imagemTag.getAttribute('href')
+        : '';
+
+      if (capa) {
+        capa = capa.replace('-t3000x3000.', '-large.');
+      }
+
+      if (link) {
+
+        todasAsFaixas.push({
+          titulo,
+          link,
+          pubDate,
+          autor,
+          capa
         });
-      });
 
-      if (todasAsFaixas.length === 0) {
-        container.innerHTML = '<p>Nenhum lançamento encontrado no momento.</p>';
-        return;
       }
 
-      // Ordena da faixa mais recente para a mais antiga
-      todasAsFaixas.sort((a, b) => new Date(b.pubDate) - new Date(a.pubDate));
+    });
 
-      container.innerHTML = '';
-      // Exibe os 10 lançamentos mais novos do grupo todo
-      todasAsFaixas.slice(0, 10).forEach(faixa => {
-        const imgTag = faixa.capa ? `<img src="${faixa.capa}" alt="Capa">` : '';
-        const playerHtml = `
-          <div class="faixa-card">
-            ${imgTag}
-            <div class="faixa-autor">${faixa.autor}</div>
-            <div class="faixa-titulo">${faixa.titulo}</div>
-            <iframe width="100%" height="20" scrolling="no" frameborder="no" allow="autoplay" src="https://soundcloud.com{encodeURIComponent(faixa.link)}&color=%23ff5500&inverse=true&auto_play=false&show_user=false">
-            </iframe>
-          </div>
-        `;
-        container.innerHTML += playerHtml;
-      });
+  });
+
+  if (todasAsFaixas.length === 0) {
+
+    container.innerHTML =
+      '<p>Não foi possível carregar os lançamentos. Tentando novamente em breve...</p>';
+
+    return;
+  }
+
+  // Remove músicas duplicadas
+  const unicas = new Map();
+
+  todasAsFaixas.forEach(faixa => {
+    unicas.set(faixa.link, faixa);
+  });
+
+  todasAsFaixas = Array.from(unicas.values());
+
+  // Ordena pelas datas mais recentes
+  todasAsFaixas.sort((a, b) => {
+    return new Date(b.pubDate) - new Date(a.pubDate);
+  });
+
+  // Monta a lista
+  container.innerHTML = '';
+
+  const status = document.createElement('div');
+  status.className = 'status-feed';
+  status.textContent = 'FEED ATUALIZADO AUTOMATICAMENTE';
+  container.appendChild(status);
+
+  todasAsFaixas.slice(0, 10).forEach(faixa => {
+
+    const card = document.createElement('div');
+    card.className = 'faixa-card';
+
+    if (faixa.capa) {
+
+      const img = document.createElement('img');
+      img.src = faixa.capa;
+      img.alt = 'Capa de ' + faixa.titulo;
+      img.loading = 'lazy';
+
+      card.appendChild(img);
+
     }
 
-    carregarLancamentos();
-  </script>
+    const autor = document.createElement('div');
+    autor.className = 'faixa-autor';
+    autor.textContent = faixa.autor;
+
+    card.appendChild(autor);
+
+    const titulo = document.createElement('div');
+    titulo.className = 'faixa-titulo';
+    titulo.textContent = faixa.titulo;
+
+    card.appendChild(titulo);
+
+    if (faixa.pubDate) {
+
+      const data = document.createElement('div');
+      data.className = 'faixa-data';
+
+      const dataPublicacao = new Date(faixa.pubDate);
+
+      data.textContent = isNaN(dataPublicacao)
+        ? ''
+        : dataPublicacao.toLocaleDateString('pt-BR');
+
+      card.appendChild(data);
+
+    }
+
+    // Player oficial do SoundCloud
+    const iframe = document.createElement('iframe');
+
+    iframe.width = '100%';
+    iframe.height = '20';
+    iframe.scrolling = 'no';
+    iframe.frameBorder = 'no';
+    iframe.allow = 'autoplay';
+
+    iframe.src =
+      'https://w.soundcloud.com/player/?url=' +
+      encodeURIComponent(faixa.link) +
+      '&color=%23ff5500' +
+      '&inverse=true' +
+      '&auto_play=false' +
+      '&show_user=false';
+
+    card.appendChild(iframe);
+
+    container.appendChild(card);
+
+  });
+
+}
+
+// Primeira atualização
+carregarLancamentos();
+
+// Atualiza automaticamente a cada 5 minutos
+setInterval(carregarLancamentos, 5 * 60 * 1000);
+
+</script>
+
 </body>
 </html>
