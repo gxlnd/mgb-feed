@@ -5,6 +5,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
+<title>Maranguapeboyz RSS</title>
+
 <style>
   body {
     margin: 0;
@@ -38,7 +40,7 @@
   .faixa-titulo {
     font-size: 12px;
     font-weight: bold;
-    color: #fff;
+    color: white;
     margin: 4px 0;
     overflow-wrap: anywhere;
   }
@@ -61,6 +63,12 @@
     margin-bottom: 10px;
   }
 
+  .erro-feed {
+    color: #ff7777;
+    font-size: 10px;
+    margin: 5px;
+  }
+
   * {
     scrollbar-width: thin;
   }
@@ -79,18 +87,40 @@
 
 <script>
 
+// ======================================
+// FEEDS DOS ARTISTAS
+// ======================================
+
 const feedsRSS = [
-  'https://feeds.soundcloud.com/users/soundcloud:users:317924305/sounds.rss',
-  'https://feeds.soundcloud.com/users/soundcloud:users:1353337512/sounds.rss',
-  'https://feeds.soundcloud.com/users/soundcloud:users:851749639/sounds.rss',
-  'https://feeds.soundcloud.com/users/soundcloud:users:1694143418/sounds.rss'
+  {
+    nome: 'santacruz4life',
+    url: 'https://feeds.soundcloud.com/users/soundcloud:users:317924305/sounds.rss'
+  },
+  {
+    nome: 'marquinhos ak trovão',
+    url: 'https://feeds.soundcloud.com/users/soundcloud:users:1353337512/sounds.rss'
+  },
+  {
+    nome: 'gvbthepluggg',
+    url: 'https://feeds.soundcloud.com/users/soundcloud:users:851749639/sounds.rss'
+  },
+  {
+    nome: 'MARANGUAPEBOYZ',
+    url: 'https://feeds.soundcloud.com/users/soundcloud:users:1694143418/sounds.rss'
+  }
 ];
 
-// Proxy para permitir a leitura dos feeds RSS
+// ======================================
+// PROXY
+// ======================================
+
 const proxies = [
-  url => 'https://api.allorigins.win/raw?url=' + encodeURIComponent(url),
-  url => 'https://corsproxy.io/?url=' + encodeURIComponent(url)
+  url => 'https://proxy.cors.dev/' + url
 ];
+
+// ======================================
+// BAIXAR XML
+// ======================================
 
 async function baixarXML(feedUrl) {
 
@@ -98,18 +128,36 @@ async function baixarXML(feedUrl) {
 
     try {
 
-      const resposta = await fetch(montarProxy(feedUrl));
+      const resposta = await fetch(montarProxy(feedUrl), {
+        cache: 'no-store',
+        credentials: 'omit'
+      });
 
-      if (!resposta.ok) continue;
+      if (!resposta.ok) {
+        console.warn('Erro HTTP:', resposta.status);
+        continue;
+      }
 
       const texto = await resposta.text();
 
-      if (texto.includes('<rss') && texto.includes('<item')) {
-        return texto;
+      const parser = new DOMParser();
+
+      const xml = parser.parseFromString(
+        texto,
+        'text/xml'
+      );
+
+      if (
+        !xml.querySelector('parsererror') &&
+        xml.querySelector('channel')
+      ) {
+        return xml;
       }
 
     } catch (erro) {
-      console.warn('Falha ao acessar proxy:', erro);
+
+      console.error('Falha ao acessar RSS:', erro);
+
     }
 
   }
@@ -117,143 +165,227 @@ async function baixarXML(feedUrl) {
   return null;
 }
 
-function textoSeguro(valor) {
-  return valor || '';
+// ======================================
+// EXTRAIR TEXTO
+// ======================================
+
+function extrairTexto(item, seletor) {
+
+  return item.getElementsByTagName(seletor)[0]
+    ?.textContent?.trim() || '';
+
 }
+
+// ======================================
+// CARREGAR LANÇAMENTOS
+// ======================================
 
 async function carregarLancamentos() {
 
-  const container = document.getElementById('feed-lancamentos');
+  const container = document.getElementById(
+    'feed-lancamentos'
+  );
 
   container.innerHTML = '<p>Atualizando lançamentos...</p>';
 
   let todasAsFaixas = [];
 
-  const resultadosXML = await Promise.all(
-    feedsRSS.map(url => baixarXML(url))
-  );
+  const resultados = await Promise.all(
 
-  resultadosXML.forEach(xmlTexto => {
+    feedsRSS.map(async feed => {
 
-    if (!xmlTexto) return;
+      const xml = await baixarXML(feed.url);
 
-    const parser = new DOMParser();
+      if (!xml) {
 
-    const xml = parser.parseFromString(xmlTexto, 'text/xml');
+        console.error(
+          'Não foi possível carregar:',
+          feed.nome
+        );
 
-    if (xml.querySelector('parsererror')) return;
+        return {
+          artista: feed.nome,
+          faixas: [],
+          erro: true
+        };
 
-    const itens = xml.querySelectorAll('item');
-
-    Array.from(itens).slice(0, 10).forEach(item => {
-
-      const titulo =
-        item.querySelector('title')?.textContent || 'Sem título';
-
-      const link =
-        item.querySelector('link')?.textContent?.trim() || '';
-
-      const pubDate =
-        item.querySelector('pubDate')?.textContent || '';
-
-      const autorTag = item.getElementsByTagName('itunes:author')[0];
-
-      const autor = autorTag
-        ? autorTag.textContent
-        : 'Maranguapeboyz';
-
-      const imagemTag = item.getElementsByTagName('itunes:image')[0];
-
-      let capa = imagemTag
-        ? imagemTag.getAttribute('href')
-        : '';
-
-      if (capa) {
-        capa = capa.replace('-t3000x3000.', '-large.');
       }
 
-      if (link) {
+      const itens = xml.querySelectorAll('item');
 
-        todasAsFaixas.push({
+      const faixas = Array.from(itens).map(item => {
+
+        const titulo = extrairTexto(item, 'title');
+
+        const link = extrairTexto(item, 'link');
+
+        const pubDate = extrairTexto(item, 'pubDate');
+
+        const autorRSS =
+          extrairTexto(item, 'itunes:author') ||
+          extrairTexto(item, 'dc:creator');
+
+        const imagemTag =
+          item.getElementsByTagName('itunes:image')[0];
+
+        let capa = imagemTag
+          ? imagemTag.getAttribute('href')
+          : '';
+
+        if (capa) {
+          capa = capa.replace(
+            '-t3000x3000.',
+            '-large.'
+          );
+        }
+
+        return {
           titulo,
           link,
           pubDate,
-          autor,
-          capa
-        });
+          autor: autorRSS || feed.nome,
+          capa,
+          perfil: feed.nome
+        };
 
-      }
+      }).filter(faixa => faixa.link);
 
-    });
+      console.log(
+        '[' + feed.nome + '] ' +
+        faixas.length +
+        ' músicas encontradas'
+      );
+
+      return {
+        artista: feed.nome,
+        faixas,
+        erro: false
+      };
+
+    })
+
+  );
+
+  // ======================================
+  // JUNTAR OS QUATRO ARTISTAS
+  // ======================================
+
+  resultados.forEach(resultado => {
+
+    todasAsFaixas.push(...resultado.faixas);
 
   });
+
+  const falhas = resultados.filter(
+    resultado => resultado.erro
+  );
 
   if (todasAsFaixas.length === 0) {
 
     container.innerHTML =
-      '<p>Não foi possível carregar os lançamentos. Tentando novamente em breve...</p>';
+      '<p>Não foi possível carregar os lançamentos. Tentando novamente...</p>';
 
     return;
+
   }
 
-  // Remove músicas duplicadas
+  // ======================================
+  // REMOVER DUPLICADOS
+  // ======================================
+
   const unicas = new Map();
 
   todasAsFaixas.forEach(faixa => {
+
     unicas.set(faixa.link, faixa);
+
   });
 
   todasAsFaixas = Array.from(unicas.values());
 
-  // Ordena pelas datas mais recentes
+  // ======================================
+  // ORDENAR POR DATA
+  // ======================================
+
   todasAsFaixas.sort((a, b) => {
-    return new Date(b.pubDate) - new Date(a.pubDate);
+
+    const dataA = new Date(a.pubDate).getTime() || 0;
+
+    const dataB = new Date(b.pubDate).getTime() || 0;
+
+    return dataB - dataA;
+
   });
 
-  // Monta a lista
+  // ======================================
+  // EXIBIR LANÇAMENTOS
+  // ======================================
+
   container.innerHTML = '';
 
   const status = document.createElement('div');
+
   status.className = 'status-feed';
-  status.textContent = 'FEED ATUALIZADO AUTOMATICAMENTE';
+
+  status.textContent = falhas.length
+    ? 'ATENÇÃO: ' + falhas.length + ' FEED(S) COM ERRO'
+    : 'FEED ATUALIZADO AUTOMATICAMENTE';
+
   container.appendChild(status);
 
   todasAsFaixas.slice(0, 10).forEach(faixa => {
 
     const card = document.createElement('div');
+
     card.className = 'faixa-card';
+
+    // CAPA
 
     if (faixa.capa) {
 
       const img = document.createElement('img');
+
       img.src = faixa.capa;
+
       img.alt = 'Capa de ' + faixa.titulo;
+
       img.loading = 'lazy';
 
       card.appendChild(img);
 
     }
 
+    // ARTISTA
+
     const autor = document.createElement('div');
+
     autor.className = 'faixa-autor';
+
     autor.textContent = faixa.autor;
 
     card.appendChild(autor);
 
+    // TÍTULO
+
     const titulo = document.createElement('div');
+
     titulo.className = 'faixa-titulo';
+
     titulo.textContent = faixa.titulo;
 
     card.appendChild(titulo);
 
+    // DATA
+
     if (faixa.pubDate) {
 
       const data = document.createElement('div');
+
       data.className = 'faixa-data';
 
       const dataPublicacao = new Date(faixa.pubDate);
 
-      data.textContent = isNaN(dataPublicacao)
+      data.textContent = isNaN(dataPublicacao.getTime())
         ? ''
         : dataPublicacao.toLocaleDateString('pt-BR');
 
@@ -261,13 +393,18 @@ async function carregarLancamentos() {
 
     }
 
-    // Player oficial do SoundCloud
+    // PLAYER SOUNDCLOUD
+
     const iframe = document.createElement('iframe');
 
     iframe.width = '100%';
+
     iframe.height = '20';
+
     iframe.scrolling = 'no';
+
     iframe.frameBorder = 'no';
+
     iframe.allow = 'autoplay';
 
     iframe.src =
@@ -284,13 +421,38 @@ async function carregarLancamentos() {
 
   });
 
+  // ======================================
+  // AVISAR SOBRE FEEDS COM ERRO
+  // ======================================
+
+  falhas.forEach(resultado => {
+
+    const aviso = document.createElement('div');
+
+    aviso.className = 'erro-feed';
+
+    aviso.textContent =
+      'Não foi possível consultar: ' +
+      resultado.artista;
+
+    container.appendChild(aviso);
+
+  });
+
 }
 
-// Primeira atualização
+// ======================================
+// INICIALIZAÇÃO
+// ======================================
+
 carregarLancamentos();
 
-// Atualiza automaticamente a cada 5 minutos
-setInterval(carregarLancamentos, 5 * 60 * 1000);
+// Atualizar a cada 5 minutos
+
+setInterval(
+  carregarLancamentos,
+  5 * 60 * 1000
+);
 
 </script>
 
